@@ -1,0 +1,42 @@
+{
+  "variables": {
+    "region": "us-west-2",
+    "source_ami": "ami-0a85857bfc5345c38",
+    "aws_access_key": "{{env `AWS_ACCESS_KEY_ID`}}",
+    "aws_secret_key": "{{env `AWS_SECRET_ACCESS_KEY`}}",
+    // "aws_session_token": "{{env `AWS_SESSION_TOKEN`}}",
+    "runner_version": "2.164.0",
+    "github_token": "",
+    "github_owner": "",
+    "github_repo": "",
+  },
+  "builders": [
+    {
+      "type": "amazon-ebs",
+      "profile": "default",
+      "region": "{{user `region`}}",
+      "access_key": "{{user `aws_access_key`}}",
+      "secret_key": "{{user `aws_secret_key`}}",
+      // "token": "{{user `aws_session_token`}}",
+      "instance_type": "t2.micro",
+      "source_ami": "{{user `source_ami`}}",
+      "ssh_username": "ec2-user",
+      "ami_name": "github-actions-runner-{{ user `github_repo` }}-{{timestamp}}",
+      "ami_description": "Amazon Linux Image with GitHub Actions",
+      "run_tags": {
+        "Name": "packer-builder-github-actions"
+      },
+      "tags": {
+        "Tool": "Packer",
+        "Author": "jarasmus"
+      }
+    }
+  ],
+  "provisioners": [
+    {
+      "type": "shell",
+      "script": "./setup.sh",
+      "execute_command": "RUNNER_VERSION={{ user `runner_version` }} GITHUB_TOKEN={{ user `github_token` }} GITHUB_OWNER={{ user `github_owner` }} GITHUB_REPO={{ user `github_repo` }} sudo -E -S sh '{{ .Path }}'"
+    }
+  ]
+}
