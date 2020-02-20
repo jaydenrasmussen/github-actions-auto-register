@@ -22,6 +22,24 @@ terraform plan \
 terraform apply -auto-approve
 ```
 
+Alternatively, you can use a tfvars file like so
+
+```hcl
+github_token = ""
+github_owner = ""
+github_repo  = ""
+team         = ""
+vpc_name     = ""
+```
+
+then you can use the following to apply the terraform like so
+
+```bash
+terraform init
+terraform plan -var-file <your-var-file>
+terraform apply -var-file <your-var-file> -auto-approve
+```
+
 #### Packer
 
 ```bash
