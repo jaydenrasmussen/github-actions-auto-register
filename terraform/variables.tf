@@ -18,3 +18,13 @@ variable "vpc_name" {
   type        = string
   description = "Name of the VPC to launch instances in"
 }
+variable "region" {
+  type = string
+  default = "us-west-2"
+  description = "Region to launch the ec2's in"
+}
+variable "instance_type" {
+  type = string
+  default = "t2.micro"
+  description = "Type of instance to launch"
+}

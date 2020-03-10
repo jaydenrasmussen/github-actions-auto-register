@@ -1,3 +1,7 @@
+provider "aws" {
+  region = var.region
+}
+
 data "aws_vpc" "launch_vpc" {
   filter {
     name   = "tag:Name"
@@ -6,12 +10,12 @@ data "aws_vpc" "launch_vpc" {
 }
 
 data "aws_subnet_ids" "vpc_subnets" {
-  vpc_id = data.aws_vpc.launch_vpc
+  vpc_id = data.aws_vpc.launch_vpc.id
 }
 
 data "template_file" "user_data" {
   template = file("${path.module}/userdata.sh.tpl")
-  vars {
+  vars = {
     github_token  = var.github_token
     github_repo   = var.github_repo
     github_owner  = var.github_owner
@@ -21,6 +25,14 @@ data "template_file" "user_data" {
 resource "aws_security_group" "gh_runner_sg" {
   name        = "gh_runner_sg"
   description = "Allow outbound internet connections"
+  vpc_id      = data.aws_vpc.launch_vpc.id
+
+  ingress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
   egress {
     from_port       = 0
@@ -43,8 +55,8 @@ module "asg" {
   # Launch configuration
   lc_name = "github-runner-${var.github_repo}-lc"
 
-  image_id        = "ami-0a85857bfc5345c38"
-  instance_type   = "t2.micro"
+  image_id        = "ami-0e8c04af2729ff1bb"
+  instance_type   = var.instance_type
   security_groups = [aws_security_group.gh_runner_sg.id]
 
   root_block_device = [
@@ -60,10 +72,11 @@ module "asg" {
   health_check_type         = "EC2"
   min_size                  = 1
   max_size                  = 20
-  desired_capacity          = 5
+  desired_capacity          = 1
   wait_for_capacity_timeout = 0
 
   user_data                 = data.template_file.user_data.rendered
+  key_name                  = "github-action-runners"
 
   tags = [
     {

@@ -5,6 +5,7 @@
 export GITHUB_TOKEN=${github_token}
 export GITHUB_REPO=${github_repo}
 export GITHUB_OWNER=${github_owner}
+export RUNNER_VERSION="2.165.2"
 # Set the environment for the machine forever
 echo GITHUB_TOKEN="$GITHUB_TOKEN" >> /etc/environment
 echo GITHUB_REPO="$GITHUB_REPO" >> /etc/environment
@@ -12,20 +13,24 @@ echo GITHUB_OWNER="$GITHUB_OWNER" >> /etc/environment
 
 yum update -y
 # Install the runner
-mkdir /runner && chmod -R 777 /runner && cd /runner
-curl -O -L "https://github.com/actions/runner/releases/download/v2.164.0/actions-runner-linux-x64-$RUNNER_VERSION.tar.gz"
+mkdir /runner
+cd /runner
+curl -LO "https://github.com/actions/runner/releases/download/v$RUNNER_VERSION/actions-runner-linux-x64-$RUNNER_VERSION.tar.gz"
 tar -xvf ./actions-runner-linux-x64-$RUNNER_VERSION.tar.gz
-
 yum install -y jq
-declare REGISTER_TOKEN=$(curl --location --request POST \
+
+chmod -R 777 /runner
+
+export REGISTER_TOKEN=$(curl --location --request POST \
 "https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/actions/runners/registration-token" \
 --header "Authorization: token $GITHUB_TOKEN" | jq -r '.token')
 
-./config.sh \
+su ec2-user -c './config.sh \
+	--unattended \
 	--url "https://github.com/$GITHUB_OWNER/$GITHUB_REPO" \
 	--token $REGISTER_TOKEN \
 	--work "$(pwd)/_work" \
-	--name "$GITHUB_REPO-runner-$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 16 | head -n 1)"
+	--name "$GITHUB_REPO-runner-$(cat /dev/urandom | tr -dc "a-zA-Z0-9" | fold -w 16 | head -n 1)"'
 
 ./svc.sh install
 ./svc.sh start
