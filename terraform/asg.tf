@@ -11,19 +11,22 @@ data "aws_vpc" "launch_vpc" {
 
 data "aws_subnet_ids" "vpc_subnets" {
   vpc_id = data.aws_vpc.launch_vpc.id
+  filter {
+    name   = "tag:Name"
+    values = ["*public*"]
+  }
 }
 
 data "template_file" "user_data" {
   template = file("${path.module}/userdata.sh.tpl")
   vars = {
     github_token  = var.github_token
-    github_repo   = var.github_repo
     github_owner  = var.github_owner
   }
 }
 
 resource "aws_security_group" "gh_runner_sg" {
-  name        = "gh_runner_sg"
+  name        = "github_actions_runner_sg"
   description = "Allow outbound internet connections"
   vpc_id      = data.aws_vpc.launch_vpc.id
 
@@ -42,56 +45,44 @@ resource "aws_security_group" "gh_runner_sg" {
   }
 
   tags = {
-    Name = "github-runner-${var.github_repo}-sg"
+    Name = "github-runner-sg"
   }
 }
 
-module "asg" {
-  source  = "terraform-aws-modules/autoscaling/aws"
-  version = "~> 3.0"
-  
-  name = "github-runner-${var.github_repo}-asg"
+data "aws_ami" "amazon-linux-2" {
+  most_recent = true
+  owners      = ["amazon"]
 
-  # Launch configuration
-  lc_name = "github-runner-${var.github_repo}-lc"
-
-  image_id        = "ami-0e8c04af2729ff1bb"
-  instance_type   = var.instance_type
-  security_groups = [aws_security_group.gh_runner_sg.id]
-
-  root_block_device = [
-    {
-      volume_size = "20"
-      volume_type = "gp2"
-    },
-  ]
-
-  # Auto scaling group
-  asg_name                  = "github-runner-${var.github_repo}-asg"
-  vpc_zone_identifier       = data.aws_subnet_ids.vpc_subnets.ids
-  health_check_type         = "EC2"
-  min_size                  = 1
-  max_size                  = 20
-  desired_capacity          = 1
-  wait_for_capacity_timeout = 0
-
-  user_data                 = data.template_file.user_data.rendered
-  key_name                  = "github-action-runners"
-
-  tags = [
-    {
-      key                 = "team"
-      value               = var.team
-      propagate_at_launch = true
-    },
-    {
-      key                 = "Name"
-      value               = "github-runner-${var.github_repo}"
-      propagate_at_launch = true
-    },
-  ]
-
-  tags_as_map = {
-    type = "github_runner"
+  filter {
+    name   = "name"
+    values = ["amzn2-ami-hvm-*-x86_64-ebs"]
   }
+}
+
+module "autoscale_group" {
+  source = "git::https://github.com/cloudposse/terraform-aws-ec2-autoscale-group.git?ref=0.4.0"
+
+  namespace = "shared"
+  stage     = "prod"
+  name      = "github-actions-runners"
+  image_id                    = data.aws_ami.amazon-linux-2.id
+  instance_type               = var.instance_type
+  security_group_ids          = [aws_security_group.gh_runner_sg.id]
+  subnet_ids                  = data.aws_subnet_ids.vpc_subnets.ids
+  health_check_type           = "EC2"
+  min_size                    = 2
+  max_size                    = 35
+  wait_for_capacity_timeout   = "5m"
+  associate_public_ip_address = true
+  user_data_base64            = "${base64encode(data.template_file.user_data.rendered)}"
+
+  tags = {
+    Environment = "production"
+    PXT = "Shared"
+  }
+
+  # Auto-scaling policies and CloudWatch metric alarms
+  autoscaling_policies_enabled           = "true"
+  cpu_utilization_high_threshold_percent = "75"
+  cpu_utilization_low_threshold_percent  = "20"
 }
